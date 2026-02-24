@@ -273,3 +273,9 @@ export default function OrganizationsPage() {
 3. **E2E tests** — Create unit, get tree, update parent, soft-delete
 4. **Next.js scaffold** — Create `apps/web-hrm` with routing and auth
 5. **Frontend components** — UnitTree + UnitFormModal + management page
+
+## Update Note (Sort Order Policy)
+
+For current implementation details of `sortOrder` (auto-generate + manual override), see:
+
+- `docs/organizations-sort-order-policy.md`

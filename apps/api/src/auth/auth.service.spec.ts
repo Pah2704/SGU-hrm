@@ -6,6 +6,7 @@ import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma';
 import type { LoginDto } from './dto';
+import { AuditService } from '../modules/audit/audit.service';
 
 jest.mock('bcrypt', () => ({
   compare: jest.fn(),
@@ -100,6 +101,7 @@ describe('AuthService', () => {
   let prisma: PrismaMock;
   let jwt: JwtMock;
   let configValues: Record<string, string>;
+  let auditService: { record: jest.Mock };
 
   beforeEach(async () => {
     configValues = {
@@ -124,6 +126,10 @@ describe('AuthService', () => {
       get: jest.fn((key: string) => configValues[key]),
     };
 
+    auditService = {
+      record: jest.fn().mockResolvedValue(undefined),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
@@ -138,6 +144,10 @@ describe('AuthService', () => {
         {
           provide: ConfigService,
           useValue: configService as unknown as ConfigService,
+        },
+        {
+          provide: AuditService,
+          useValue: auditService as unknown as AuditService,
         },
       ],
     }).compile();

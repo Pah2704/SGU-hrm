@@ -17,6 +17,7 @@ import { contractsService, Contract, ContractType } from '@/services/contracts.s
 import { format } from 'date-fns';
 import { useState } from 'react';
 import { ContractFormModal } from './contract-form-modal';
+import { toast } from 'sonner';
 
 interface ContractsTabProps {
   employeeId: string;
@@ -36,11 +37,17 @@ export function ContractsTab({ employeeId }: ContractsTabProps) {
     mutationFn: contractsService.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contracts', employeeId] });
+      toast.success('Đã xóa hợp đồng thành công');
+    },
+    onError: () => {
+      toast.error('Không thể xóa hợp đồng', {
+        description: 'Vui lòng thử lại.',
+      });
     },
   });
 
   const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this contract?')) {
+    if (confirm('Bạn có chắc chắn muốn xóa hợp đồng này?')) {
       deleteMutation.mutate(id);
     }
   };
@@ -55,7 +62,7 @@ export function ContractsTab({ employeeId }: ContractsTabProps) {
     }
   };
 
-  if (isLoading) return <div>Loading contracts...</div>;
+  if (isLoading) return <div>Đang tải hợp đồng...</div>;
 
   return (
     <div className="space-y-4">

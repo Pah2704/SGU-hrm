@@ -34,6 +34,7 @@ export const PERMISSIONS = {
   SALARY_READ: 'salary:read',
   SALARY_READ_OWN: 'salary:read_own',
   SALARY_WRITE: 'salary:write',
+  SALARY_CONFIG_MANAGE: 'salary:config_manage',
 
   // ─────────────────────────────────────────────────────────────────
   // LEAVES
@@ -124,10 +125,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionCode[]> = {
     PERMISSIONS.SALARY_READ,
     PERMISSIONS.SALARY_READ_OWN,
     PERMISSIONS.SALARY_WRITE,
+    PERMISSIONS.SALARY_CONFIG_MANAGE,
     // Leaves
     PERMISSIONS.LEAVES_READ,
     PERMISSIONS.LEAVES_READ_UNIT,
     PERMISSIONS.LEAVES_READ_OWN,
+    PERMISSIONS.LEAVES_WRITE,
     PERMISSIONS.LEAVES_APPROVE,
     // Recruitment
     PERMISSIONS.RECRUITMENT_READ,
@@ -135,6 +138,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionCode[]> = {
     PERMISSIONS.RECRUITMENT_CONVERT,
     // Education
     PERMISSIONS.EDUCATION_READ,
+    PERMISSIONS.EDUCATION_WRITE,
     PERMISSIONS.EDUCATION_APPROVE,
     // Organizations
     PERMISSIONS.ORGANIZATIONS_READ,
@@ -183,7 +187,6 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionCode[]> = {
     PERMISSIONS.LEAVES_WRITE,
     PERMISSIONS.EDUCATION_READ,
     PERMISSIONS.EDUCATION_WRITE,
-    PERMISSIONS.ORGANIZATIONS_READ,
   ],
 };
 
@@ -277,6 +280,12 @@ export const PERMISSION_METADATA: PermissionMeta[] = [
     module: 'salary',
     action: 'write',
     description: 'Cập nhật thông tin lương',
+  },
+  {
+    code: PERMISSIONS.SALARY_CONFIG_MANAGE,
+    module: 'salary',
+    action: 'config_manage',
+    description: 'Quan ly cau hinh ngach va bac luong',
   },
   // Leaves
   {

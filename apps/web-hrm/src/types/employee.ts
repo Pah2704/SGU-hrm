@@ -13,6 +13,7 @@ export enum EmployeeStatus {
 
 export interface Employee {
   id: string;
+  userId?: string;
   employeeCode: string;
   citizenId: string;
   fullName: string;
@@ -38,6 +39,7 @@ export interface Employee {
   initialRecruitmentAgency?: string;
   currentOrgJoinDate?: string;
   officialDate?: string;
+  highestDegree?: string;
   
   // Add other fields as needed for the list view
   currentPosition?: string;
@@ -51,9 +53,20 @@ export interface CreateEmployeeDto {
   employeeCode: string;
   citizenId: string;
   fullName: string;
+  aliasName?: string;
   dob: string;
   gender: Gender;
   unitId: string;
+  email?: string;
+  phone?: string;
+  citizenCardDate?: string;
+  citizenCardPlace?: string;
+  ethnicityId?: string;
+  religionId?: string;
+  officialDate?: string;
+  initialRecruitmentDate?: string;
+  initialRecruitmentAgency?: string;
+  currentOrgJoinDate?: string;
   // ... maps to backend DTO
 }
 

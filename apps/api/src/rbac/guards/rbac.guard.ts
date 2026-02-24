@@ -6,7 +6,10 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
-import { PERMISSIONS_KEY } from '../decorators/require-permissions.decorator';
+import {
+  ANY_PERMISSIONS_KEY,
+  PERMISSIONS_KEY,
+} from '../decorators/require-permissions.decorator';
 import type { CurrentUserPayload } from '../../auth/interfaces';
 
 /**
@@ -30,9 +33,17 @@ export class RbacGuard implements CanActivate {
       PERMISSIONS_KEY,
       [context.getHandler(), context.getClass()],
     );
+    const requiredAnyPermissions = this.reflector.getAllAndOverride<string[]>(
+      ANY_PERMISSIONS_KEY,
+      [context.getHandler(), context.getClass()],
+    );
 
     // No RBAC decorators = allow (only JWT required)
-    if (!requiredRoles?.length && !requiredPermissions?.length) {
+    if (
+      !requiredRoles?.length &&
+      !requiredPermissions?.length &&
+      !requiredAnyPermissions?.length
+    ) {
       return true;
     }
 
@@ -64,6 +75,19 @@ export class RbacGuard implements CanActivate {
       if (missingPermissions.length > 0) {
         throw new ForbiddenException(
           `Insufficient permissions. Missing: ${missingPermissions.join(', ')}`,
+        );
+      }
+    }
+
+    // Check permissions (ANY match)
+    if (requiredAnyPermissions?.length) {
+      const hasAnyPermission = requiredAnyPermissions.some((perm) =>
+        user.permissions.includes(perm),
+      );
+
+      if (!hasAnyPermission) {
+        throw new ForbiddenException(
+          `Insufficient permissions. Required any of: ${requiredAnyPermissions.join(', ')}`,
         );
       }
     }

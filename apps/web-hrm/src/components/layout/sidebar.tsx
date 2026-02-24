@@ -1,70 +1,144 @@
-'use client';
+﻿'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
+import type { ComponentType } from 'react';
+import { useMemo } from 'react';
 import { usePathname } from 'next/navigation';
-import { Building2, Users, FileText, Settings, LayoutDashboard } from 'lucide-react';
+import {
+  BriefcaseBusiness,
+  Building2,
+  CalendarClock,
+  CircleUser,
+  ClipboardCheck,
+  FileSpreadsheet,
+  FileText,
+  FolderTree,
+  LayoutDashboard,
+  Newspaper,
+  Users,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { hasAnyPermission, hasAnyRole } from '@/lib/authz';
+import { useWorkspace } from '@/components/providers/workspace-provider';
+import {
+  getSidebarMenuItemsForWorkspace,
+  isSidebarItemActive,
+} from '@/lib/module-workspace/policy';
+import {
+  type SidebarIconKey,
+} from '@/lib/module-workspace/registry';
+import {
+  WORKSPACE_DEFINITIONS,
+} from '@/lib/workspaces';
 
-const menuItems = [
-  { icon: LayoutDashboard, label: 'Tổng quan', href: '/' },
-  { icon: Building2, label: 'Tổ chức', href: '/organizations' },
-  { icon: Users, label: 'Nhân sự', href: '/employees' },
-  { icon: FileText, label: 'Hợp đồng', href: '/contracts' },
-  { icon: Settings, label: 'Cấu hình', href: '/settings' },
-];
+const ICON_MAP: Record<SidebarIconKey, ComponentType<{ className?: string }>> = {
+  'layout-dashboard': LayoutDashboard,
+  'building-2': Building2,
+  users: Users,
+  'calendar-clock': CalendarClock,
+  'briefcase-business': BriefcaseBusiness,
+  'circle-user': CircleUser,
+  'clipboard-check': ClipboardCheck,
+  newspaper: Newspaper,
+  'file-text': FileText,
+  'folder-tree': FolderTree,
+  'file-spreadsheet': FileSpreadsheet,
+};
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { activeWorkspace, authSnapshot } = useWorkspace();
+
+  const workspaceLabel = activeWorkspace
+    ? WORKSPACE_DEFINITIONS[activeWorkspace].label
+    : 'Khong xac dinh';
+
+  const menuItems = useMemo(() => {
+    const workspaceItems = getSidebarMenuItemsForWorkspace(activeWorkspace);
+
+    return workspaceItems.filter((item) => {
+      const passPermissions = item.requiredAnyPermissions
+        ? hasAnyPermission(authSnapshot.permissions, item.requiredAnyPermissions)
+        : true;
+      const passRoles = item.requiredAnyRoles
+        ? hasAnyRole(authSnapshot.roles, item.requiredAnyRoles)
+        : true;
+
+      return passPermissions && passRoles;
+    });
+  }, [activeWorkspace, authSnapshot.permissions, authSnapshot.roles]);
 
   return (
-    <aside className="w-64 bg-sidebar text-sidebar-foreground flex flex-col h-full border-r border-sidebar-border shadow-xl z-20">
-      {/* Brand Header */}
-      <div className="h-16 flex items-center px-6 border-b border-sidebar-border bg-sidebar-accent/10">
+    <aside className="z-20 flex h-full w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-xl">
+      <div className="flex h-16 items-center border-b border-sidebar-border bg-sidebar-accent/10 px-6">
         <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-full bg-white flex items-center justify-center p-1 shadow-md">
-             {/* Abstract Logo Placeholder */}
-             <div className="h-full w-full rounded-full bg-[oklch(0.25_0.08_260)]" />
-          </div>
+          <Image
+            src="/images/logo-sgu.png"
+            alt="Logo Đại học Sài Gòn"
+            width={36}
+            height={36}
+            className="rounded-full shadow-md"
+          />
           <div>
-            <h1 className="font-bold text-lg leading-none tracking-tight">SGU HRM</h1>
-            <p className="text-[10px] text-sidebar-foreground/70 uppercase tracking-wider font-semibold">Đại Học Sài Gòn</p>
+            <h1 className="text-lg font-bold leading-none tracking-tight">SGU HRM</h1>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/70">
+              Dai hoc Sai Gon
+            </p>
           </div>
         </div>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-3 py-6 space-y-1">
-        <div className="px-3 mb-2">
-          <span className="text-xs font-semibold text-sidebar-foreground/50 uppercase tracking-widest">Menu</span>
+      <nav className="flex-1 space-y-1 px-3 py-6">
+        <div className="mb-3 px-3">
+          <span className="block text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/50">
+            Workspace
+          </span>
+          <span className="text-sm font-medium text-sidebar-foreground/90">
+            {workspaceLabel}
+          </span>
         </div>
-        
+
         {menuItems.map((item) => {
-          const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
-          
+          const isActive = isSidebarItemActive(pathname, item);
+          const Icon = ICON_MAP[item.iconKey];
+
           return (
             <Link
-              key={item.href}
+              key={`${activeWorkspace ?? 'unknown'}:${item.id}`}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-200 group relative",
-                isActive 
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-md" 
-                  : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-white"
+                'group relative flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all duration-200',
+                isActive
+                  ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-md'
+                  : 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-white',
               )}
             >
-              {isActive && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-1 bg-white/30 rounded-r-full" />
-              )}
-              <item.icon className={cn("h-5 w-5", isActive ? "text-white" : "text-sidebar-foreground/70 group-hover:text-white")} />
+              {isActive ? (
+                <div className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-white/30" />
+              ) : null}
+              <Icon
+                className={cn(
+                  'h-5 w-5',
+                  isActive
+                    ? 'text-white'
+                    : 'text-sidebar-foreground/70 group-hover:text-white',
+                )}
+              />
               {item.label}
             </Link>
           );
         })}
+
+        {!menuItems.length ? (
+          <div className="rounded-md border border-sidebar-border/70 bg-sidebar-accent/10 px-3 py-2 text-xs text-sidebar-foreground/70">
+            Workspace hien tai chua co menu kha dung.
+          </div>
+        ) : null}
       </nav>
 
-      {/* Footer */}
-      <div className="p-4 border-t border-sidebar-border bg-sidebar-accent/5">
-        <div className="text-xs text-center text-sidebar-foreground/40 font-mono">
+      <div className="border-t border-sidebar-border bg-sidebar-accent/5 p-4">
+        <div className="text-center font-mono text-xs text-sidebar-foreground/40">
           v1.0.0 (Beta)
         </div>
       </div>

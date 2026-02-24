@@ -17,7 +17,7 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
     "gate:local": "npm run lint && npm run build && npm run test && npm run test:e2e",
     "gate:local:cov": "npm run lint && npm run build && npm run test:cov && npm run test:e2e"
   },
@@ -31,10 +31,12 @@
     "@nestjs/passport": "11.0.5",
     "@nestjs/platform-express": "11.0.1",
     "@prisma/client": "6.19.2",
+    "@types/cookie-parser": "^1.4.10",
     "bcrypt": "5.1.1",
     "bullmq": "5.67.3",
     "class-transformer": "0.5.1",
     "class-validator": "0.14.1",
+    "cookie-parser": "^1.4.7",
     "ioredis": "5.9.2",
     "passport": "0.7.0",
     "passport-jwt": "4.0.1",
@@ -93,8 +95,5 @@
         "statements": 10
       }
     }
-  },
-  "prisma": {
-    "seed": "ts-node prisma/seed.ts"
   }
 }

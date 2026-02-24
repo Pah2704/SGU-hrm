@@ -1,4 +1,5 @@
 import {
+  Logger,
   Injectable,
   UnauthorizedException,
   BadRequestException,
@@ -10,6 +11,7 @@ import type { SignOptions } from 'jsonwebtoken';
 import { PrismaService } from '../prisma';
 import { LoginDto, TokenResponse } from './dto';
 import type { JwtPayload } from './interfaces';
+import { AuditService } from '../modules/audit/audit.service';
 
 interface RefreshTokenPayload {
   sub: string;
@@ -18,18 +20,25 @@ interface RefreshTokenPayload {
   exp?: number;
 }
 
+export interface LoginResult extends TokenResponse {
+  refreshToken: string;
+}
+
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwt: JwtService,
     private config: ConfigService,
+    private auditService: AuditService,
   ) {}
 
   /**
    * Authenticate user and generate tokens
    */
-  async login(dto: LoginDto): Promise<TokenResponse> {
+  async login(dto: LoginDto): Promise<LoginResult> {
     // 1. Find user by email
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -54,6 +63,7 @@ export class AuthService {
     });
 
     if (!user) {
+      this.logger.warn(`Login failed: user not found (${dto.email})`);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -67,6 +77,7 @@ export class AuthService {
       user.passwordHash,
     );
     if (!isPasswordValid) {
+      this.logger.warn(`Login failed: invalid password (${dto.email})`);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -92,6 +103,16 @@ export class AuthService {
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
     });
+
+    await this.auditService.record(
+      { userId: user.id, roles },
+      'AUTH',
+      user.id,
+      'LOGIN',
+      {
+        email: user.email,
+      },
+    );
 
     return {
       accessToken,
@@ -159,6 +180,13 @@ export class AuthService {
         unitId: user.employee?.unitId,
       };
 
+      await this.auditService.record(
+        { userId: user.id, roles },
+        'AUTH',
+        user.id,
+        'REFRESH',
+      );
+
       return {
         accessToken: this.jwt.sign(payload),
         expiresIn: this.getExpiresInSeconds(),
@@ -174,7 +202,7 @@ export class AuthService {
    * For production: implement token blacklist/revocation
    */
   logout(userId: string): { message: string } {
-    void userId;
+    void this.auditService.record({ userId }, 'AUTH', userId, 'LOGOUT');
     // TODO: Implement refresh token revocation in Redis/DB
     return { message: 'Logged out successfully' };
   }

@@ -113,10 +113,11 @@ export const DEGREE_RANK = {
 export const RANK_RAISE_MONTHS = {
   A0: 36,
   A1: 36,
-  A2: 36,
-  A3: 36,
+  A2_1: 36,
+  A2_2: 36,
+  A3_1: 36,
+  A3_2: 36,
   B: 24,
-  C: 24,
 } as const;
 
 // Discipline penalty months

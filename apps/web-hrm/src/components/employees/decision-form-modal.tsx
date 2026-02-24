@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -33,28 +33,97 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import useSWR from 'swr';
 import api from '@/lib/api';
+import { isAxiosError } from 'axios';
 
 const decisionSchema = z.object({
   positionId: z.string().min(1, 'Vui lòng chọn chức vụ'),
   decisionNo: z.string().optional(),
   decisionDate: z.string().optional(),
-  appointDate: z.string().min(1, 'Ngày bổ nhiệm là bắt buộc'),
-  endDate: z.string().optional(), // For manual closing
+  appointDate: z.string().min(1, 'Vui lòng chọn ngày hiệu lực'),
+  endDate: z.string().optional(),
   isPrimary: z.boolean().default(false),
   documentUrl: z.string().optional(),
 });
 
 type DecisionFormValues = z.infer<typeof decisionSchema>;
 
+interface PositionOption {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export interface DecisionRecord {
+  id: string;
+  positionId: string;
+  decisionNo?: string | null;
+  decisionDate?: string | null;
+  appointDate: string;
+  endDate?: string | null;
+  isPrimary: boolean;
+  documentUrl?: string | null;
+  position?: {
+    id: string;
+    code: string;
+    name: string;
+  } | null;
+}
+
+export type DecisionFormMode = 'process' | 'appointment';
+
 interface DecisionFormModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   employeeId: string;
-  decision?: any; // If editing
+  decision?: DecisionRecord;
   onSuccess: () => void;
+  mode?: DecisionFormMode;
 }
 
-export function DecisionFormModal({ open, onOpenChange, employeeId, decision, onSuccess }: DecisionFormModalProps) {
+const COPY_BY_MODE: Record<
+  DecisionFormMode,
+  {
+    createTitle: string;
+    updateTitle: string;
+    description: string;
+    createSuccess: string;
+    updateSuccess: string;
+    saveButtonLabel: string;
+    appointDateLabel: string;
+    endDateLabel: string;
+  }
+> = {
+  process: {
+    createTitle: 'Thêm quá trình công tác',
+    updateTitle: 'Cập nhật quá trình công tác',
+    description: 'Nhập thông tin quá trình công tác của nhân sự.',
+    createSuccess: 'Đã thêm quá trình công tác thành công',
+    updateSuccess: 'Đã cập nhật quá trình công tác thành công',
+    saveButtonLabel: 'Lưu quá trình công tác',
+    appointDateLabel: 'Ngày bắt đầu công tác (Hiệu lực)',
+    endDateLabel: 'Ngày kết thúc quá trình công tác',
+  },
+  appointment: {
+    createTitle: 'Bổ nhiệm / Điều động',
+    updateTitle: 'Cập nhật quyết định bổ nhiệm / điều động',
+    description: 'Nhập thông tin quyết định bổ nhiệm hoặc điều động nhân sự.',
+    createSuccess: 'Đã tạo quyết định bổ nhiệm / điều động thành công',
+    updateSuccess: 'Đã cập nhật quyết định bổ nhiệm / điều động thành công',
+    saveButtonLabel: 'Lưu quyết định',
+    appointDateLabel: 'Ngày bổ nhiệm / điều động (Hiệu lực)',
+    endDateLabel: 'Ngày kết thúc (Thôi giữ chức vụ)',
+  },
+};
+
+export function DecisionFormModal({
+  open,
+  onOpenChange,
+  employeeId,
+  decision,
+  onSuccess,
+  mode = 'appointment',
+}: DecisionFormModalProps) {
+  const copy = useMemo(() => COPY_BY_MODE[mode], [mode]);
   const form = useForm<DecisionFormValues>({
     resolver: zodResolver(decisionSchema),
     defaultValues: {
@@ -67,21 +136,31 @@ export function DecisionFormModal({ open, onOpenChange, employeeId, decision, on
     },
   });
 
-  // Fetch positions master data
-  const { data: positions } = useSWR('/positions', (url) => api.get(url).then(res => res.data));
+  const { data: positions } = useSWR<PositionOption[]>(
+    '/positions',
+    (url: string) => api.get(url).then((res) => res.data),
+  );
 
   useEffect(() => {
-    if (open) {
-      form.reset({
-        positionId: decision?.positionId || '',
-        decisionNo: decision?.decisionNo || '',
-        decisionDate: decision?.decisionDate ? new Date(decision.decisionDate).toISOString().split('T')[0] : '',
-        appointDate: decision?.appointDate ? new Date(decision.appointDate).toISOString().split('T')[0] : '',
-        endDate: decision?.endDate ? new Date(decision.endDate).toISOString().split('T')[0] : '',
-        isPrimary: decision?.isPrimary || false,
-        documentUrl: decision?.documentUrl || '',
-      });
+    if (!open) {
+      return;
     }
+
+    form.reset({
+      positionId: decision?.positionId || '',
+      decisionNo: decision?.decisionNo || '',
+      decisionDate: decision?.decisionDate
+        ? new Date(decision.decisionDate).toISOString().split('T')[0]
+        : '',
+      appointDate: decision?.appointDate
+        ? new Date(decision.appointDate).toISOString().split('T')[0]
+        : '',
+      endDate: decision?.endDate
+        ? new Date(decision.endDate).toISOString().split('T')[0]
+        : '',
+      isPrimary: decision?.isPrimary || false,
+      documentUrl: decision?.documentUrl || '',
+    });
   }, [open, decision, form]);
 
   const onSubmit = async (data: DecisionFormValues) => {
@@ -90,22 +169,29 @@ export function DecisionFormModal({ open, onOpenChange, employeeId, decision, on
         ...data,
         employeeId,
         appointDate: new Date(data.appointDate).toISOString(),
-        endDate: data.endDate ? new Date(data.endDate).toISOString() : null, // Handle reset
-        decisionDate: data.decisionDate ? new Date(data.decisionDate).toISOString() : undefined,
+        endDate: data.endDate ? new Date(data.endDate).toISOString() : null,
+        decisionDate: data.decisionDate
+          ? new Date(data.decisionDate).toISOString()
+          : undefined,
       };
 
       if (decision) {
         await api.patch(`/decisions/${decision.id}`, payload);
-        toast.success('Cập nhật quyết định thành công');
+        toast.success(copy.updateSuccess);
       } else {
         await api.post('/decisions', payload);
-        toast.success('Bổ nhiệm thành công');
+        toast.success(copy.createSuccess);
       }
+
       onSuccess();
       onOpenChange(false);
-    } catch (error: any) {
-      toast.error('Có lỗi xảy ra', {
-        description: error.response?.data?.message || error.message,
+    } catch (error: unknown) {
+      toast.error('Không thể lưu quyết định', {
+        description: isAxiosError<{ message?: string }>(error)
+          ? error.response?.data?.message || error.message
+          : error instanceof Error
+            ? error.message
+            : 'Vui lòng thử lại.',
       });
     }
   };
@@ -114,10 +200,10 @@ export function DecisionFormModal({ open, onOpenChange, employeeId, decision, on
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>{decision ? 'Cập nhật Quyết định' : 'Bổ nhiệm / Điều động'}</DialogTitle>
-          <DialogDescription>
-            Nhập thông tin quyết định bổ nhiệm nhân sự.
-          </DialogDescription>
+          <DialogTitle>
+            {decision ? copy.updateTitle : copy.createTitle}
+          </DialogTitle>
+          <DialogDescription>{copy.description}</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -129,16 +215,16 @@ export function DecisionFormModal({ open, onOpenChange, employeeId, decision, on
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Chức vụ</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Chọn chức vụ" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {positions?.map((pos: any) => (
-                          <SelectItem key={pos.id} value={pos.id}>
-                            {pos.name} ({pos.code})
+                        {positions?.map((position) => (
+                          <SelectItem key={position.id} value={position.id}>
+                            {position.name} ({position.code})
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -153,7 +239,7 @@ export function DecisionFormModal({ open, onOpenChange, employeeId, decision, on
                 name="appointDate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Ngày bổ nhiệm (Hiệu lực)</FormLabel>
+                    <FormLabel>{copy.appointDateLabel}</FormLabel>
                     <FormControl>
                       <Input type="date" {...field} />
                     </FormControl>
@@ -169,9 +255,9 @@ export function DecisionFormModal({ open, onOpenChange, employeeId, decision, on
                 name="decisionNo"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Số Quyết định</FormLabel>
+                    <FormLabel>Số quyết định</FormLabel>
                     <FormControl>
-                      <Input placeholder="123/QĐ-ĐHSG" {...field} />
+                      <Input placeholder="123/QD-DHSG" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -203,7 +289,7 @@ export function DecisionFormModal({ open, onOpenChange, employeeId, decision, on
                     <Input placeholder="https://..." {...field} />
                   </FormControl>
                   <FormDescription>
-                    Sau này sẽ thay bằng upload file trực tiếp.
+                    Giai đoạn sau có thể thay bằng upload file trực tiếp.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -222,39 +308,44 @@ export function DecisionFormModal({ open, onOpenChange, employeeId, decision, on
                     />
                   </FormControl>
                   <div className="space-y-1 leading-none">
-                    <FormLabel>
-                      Là chức vụ chính (Primary)
-                    </FormLabel>
+                    <FormLabel>Là chức vụ chính (Primary)</FormLabel>
                     <FormDescription>
-                      Nếu chọn, hệ thống sẽ tự động đóng kết thúc chức vụ chính cũ (nếu có).
+                      Nếu chọn, hệ thống sẽ tự động đóng chức vụ chính cũ (nếu
+                      có).
                     </FormDescription>
                   </div>
                 </FormItem>
               )}
             />
 
-            {decision && (
+            {decision ? (
               <FormField
                 control={form.control}
                 name="endDate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Ngày kết thúc (Thôi giữ chức vụ)</FormLabel>
+                    <FormLabel>{copy.endDateLabel}</FormLabel>
                     <FormControl>
                       <Input type="date" {...field} />
                     </FormControl>
-                    <FormDescription>Để trống nếu vẫn đang đương nhiệm.</FormDescription>
+                    <FormDescription>
+                      Để trống nếu vẫn đang đương nhiệm.
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            )}
+            ) : null}
 
             <div className="flex justify-end space-x-2">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+              >
                 Hủy
               </Button>
-              <Button type="submit">Lưu quyết định</Button>
+              <Button type="submit">{copy.saveButtonLabel}</Button>
             </div>
           </form>
         </Form>
@@ -262,3 +353,4 @@ export function DecisionFormModal({ open, onOpenChange, employeeId, decision, on
     </Dialog>
   );
 }
+

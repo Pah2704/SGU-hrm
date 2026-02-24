@@ -197,8 +197,8 @@
 
 - `civil_servant_rank`, `rank_type`, `salary_level`, `coefficient`, `current_level_date`.
 - `expected_raise_date`:
-  - Nhóm A0-A3: 36 tháng.
-  - Nhóm B/C: 24 tháng.
+  - Nhóm A0-A3_2: 36 tháng.
+  - Nhóm B: 24 tháng.
 - `warning_flag`: Bật nếu có Kỷ luật hoặc Nghỉ không lương.
 
 #### 10.2. Quy trình Nâng lương Thường xuyên (Auto-Scan)
@@ -264,3 +264,4 @@
 - **User/Employee Isolation:** Tách biệt bảng `users` và `employees` (1-1 match).
 - **Enum Management:** Sử dụng file định nghĩa tập trung (constants.ts).
 - **Unit Test:** Tập trung vào logic tính `expected_raise_date` (Nâng lương).
+

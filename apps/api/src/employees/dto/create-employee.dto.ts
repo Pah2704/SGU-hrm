@@ -26,6 +26,22 @@ export class CreateEmployeeDto {
   aliasName?: string;
 
   @IsDateString()
+  @IsOptional()
+  citizenCardDate?: string;
+
+  @IsString()
+  @IsOptional()
+  citizenCardPlace?: string;
+
+  @IsString()
+  @IsOptional()
+  ethnicityId?: string;
+
+  @IsString()
+  @IsOptional()
+  religionId?: string;
+
+  @IsDateString()
   @IsNotEmpty()
   dob: string; // ISO Date
 
@@ -58,6 +74,10 @@ export class CreateEmployeeDto {
   @IsDateString()
   @IsOptional()
   initialRecruitmentDate?: string;
+
+  @IsString()
+  @IsOptional()
+  initialRecruitmentAgency?: string;
 
   @IsDateString()
   @IsOptional()

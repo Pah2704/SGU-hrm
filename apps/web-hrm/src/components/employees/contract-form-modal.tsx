@@ -87,12 +87,14 @@ export function ContractFormModal({
   const createMutation = useMutation({
     mutationFn: contractsService.create,
     onSuccess: () => {
-      toast.success('Thêm hợp đồng thành công');
+      toast.success('Đã thêm hợp đồng thành công');
       onSuccess();
       onOpenChange(false);
     },
     onError: () => {
-      toast.error('Có lỗi xảy ra khi thêm hợp đồng');
+      toast.error('Không thể thêm hợp đồng', {
+        description: 'Vui lòng thử lại.',
+      });
     },
   });
 
@@ -100,12 +102,14 @@ export function ContractFormModal({
     mutationFn: (data: ContractFormValues) => 
       contractsService.update(initialData!.id, data),
     onSuccess: () => {
-      toast.success('Cập nhật hợp đồng thành công');
+      toast.success('Đã cập nhật hợp đồng thành công');
       onSuccess();
       onOpenChange(false);
     },
     onError: () => {
-      toast.error('Có lỗi xảy ra khi cập nhật hợp đồng');
+      toast.error('Không thể cập nhật hợp đồng', {
+        description: 'Vui lòng thử lại.',
+      });
     },
   });
 

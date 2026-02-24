@@ -1,9 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { Gender } from '@prisma/client';
 import { EmployeesService } from './employees.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../modules/audit/audit.service';
 
 jest.mock('bcrypt', () => ({
   hash: jest.fn(),
@@ -53,9 +54,13 @@ const createPrismaMock = (): PrismaMock => {
 describe('EmployeesService', () => {
   let service: EmployeesService;
   let mockPrisma: PrismaMock;
+  let mockAuditService: { record: jest.Mock };
 
   beforeEach(async () => {
     mockPrisma = createPrismaMock();
+    mockAuditService = {
+      record: jest.fn().mockResolvedValue(undefined),
+    };
     (bcrypt.hash as jest.Mock).mockResolvedValue('hashed_123456789');
 
     const module: TestingModule = await Test.createTestingModule({
@@ -64,6 +69,10 @@ describe('EmployeesService', () => {
         {
           provide: PrismaService,
           useValue: mockPrisma as unknown as PrismaService,
+        },
+        {
+          provide: AuditService,
+          useValue: mockAuditService,
         },
       ],
     }).compile();
@@ -189,6 +198,43 @@ describe('EmployeesService', () => {
         ConflictException,
       );
       expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('remove', () => {
+    it('should soft-delete employee by setting deletedAt', async () => {
+      mockPrisma.employee.findUnique.mockResolvedValue({
+        id: 'emp-1',
+        deletedAt: null,
+      });
+      const deletedAt = new Date('2026-02-11T12:00:00.000Z');
+      mockPrisma.employee.update.mockResolvedValue({ id: 'emp-1', deletedAt });
+
+      const result = await service.remove('emp-1');
+
+      const updateCalls = mockPrisma.employee.update.mock.calls as Array<
+        [unknown]
+      >;
+      const updateArg = updateCalls[0]?.[0] as {
+        where: { id: string };
+        data: { deletedAt: Date };
+      };
+
+      expect(updateArg.where.id).toBe('emp-1');
+      expect(updateArg.data.deletedAt).toBeInstanceOf(Date);
+      expect(result).toEqual({ id: 'emp-1', deletedAt });
+    });
+
+    it('should fail when employee is already soft-deleted', async () => {
+      mockPrisma.employee.findUnique.mockResolvedValue({
+        id: 'emp-1',
+        deletedAt: new Date('2026-02-11T00:00:00.000Z'),
+      });
+
+      await expect(service.remove('emp-1')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(mockPrisma.employee.update).not.toHaveBeenCalled();
     });
   });
 });

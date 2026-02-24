@@ -1,16 +1,38 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from './../src/app.module';
+import { configureApp } from './../src/app.setup';
 
 interface LoginResponseBody {
   accessToken: string;
-  refreshToken: string;
+  expiresIn: number;
 }
 
 interface UserProfileResponseBody {
   email: string;
 }
+
+const unwrapData = <T>(body: unknown): T => {
+  if (typeof body === 'object' && body !== null && 'data' in body) {
+    return (body as { data: T }).data;
+  }
+  return body as T;
+};
+
+const toCookieList = (
+  setCookieHeader: string | string[] | undefined,
+): string[] => {
+  if (Array.isArray(setCookieHeader)) {
+    return setCookieHeader;
+  }
+
+  if (typeof setCookieHeader === 'string') {
+    return [setCookieHeader];
+  }
+
+  return [];
+};
 
 describe('Authentication (e2e)', () => {
   let app: INestApplication;
@@ -23,9 +45,7 @@ describe('Authentication (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, transform: true }),
-    );
+    configureApp(app);
     await app.init();
   });
 
@@ -43,9 +63,16 @@ describe('Authentication (e2e)', () => {
         })
         .expect(200);
 
-      const body = response.body as Partial<LoginResponseBody>;
+      const body = unwrapData<Partial<LoginResponseBody>>(response.body);
       expect(typeof body.accessToken).toBe('string');
-      expect(typeof body.refreshToken).toBe('string');
+      expect(typeof body.expiresIn).toBe('number');
+
+      const setCookieHeader = response.headers['set-cookie'];
+      const cookies = toCookieList(setCookieHeader);
+      const refreshCookie = cookies?.find((cookie) =>
+        cookie.startsWith('refreshToken='),
+      );
+      expect(refreshCookie).toBeDefined();
     });
 
     it('should fail to login with wrong password', async () => {
@@ -57,6 +84,32 @@ describe('Authentication (e2e)', () => {
         })
         .expect(401);
     });
+
+    it('should refresh access token from httpOnly refresh cookie', async () => {
+      const loginResponse = await request(httpServer())
+        .post('/auth/login')
+        .send({
+          email: 'admin@sgu.edu.vn',
+          password: 'Admin@123',
+        })
+        .expect(200);
+
+      const setCookieHeader = loginResponse.headers['set-cookie'];
+      const cookies = toCookieList(setCookieHeader);
+      const refreshCookie = cookies?.find((cookie) =>
+        cookie.startsWith('refreshToken='),
+      );
+      expect(refreshCookie).toBeDefined();
+
+      const refreshResponse = await request(httpServer())
+        .post('/auth/refresh')
+        .set('Cookie', refreshCookie ?? '')
+        .expect(200);
+
+      const body = unwrapData<Partial<LoginResponseBody>>(refreshResponse.body);
+      expect(typeof body.accessToken).toBe('string');
+      expect(typeof body.expiresIn).toBe('number');
+    });
   });
 
   describe('RBAC Protection', () => {
@@ -67,7 +120,7 @@ describe('Authentication (e2e)', () => {
         email: 'admin@sgu.edu.vn',
         password: 'Admin@123',
       });
-      const body = response.body as LoginResponseBody;
+      const body = unwrapData<LoginResponseBody>(response.body);
       adminToken = body.accessToken;
     });
 
@@ -77,7 +130,7 @@ describe('Authentication (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
 
-      const body = response.body as UserProfileResponseBody;
+      const body = unwrapData<UserProfileResponseBody>(response.body);
       expect(body.email).toBe('admin@sgu.edu.vn');
     });
 

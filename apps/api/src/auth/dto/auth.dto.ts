@@ -9,13 +9,7 @@ export class LoginDto {
   password: string;
 }
 
-export class RefreshDto {
-  @IsString()
-  refreshToken: string;
-}
-
 export interface TokenResponse {
   accessToken: string;
-  refreshToken: string;
   expiresIn: number;
 }

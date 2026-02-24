@@ -8,13 +8,16 @@ import {
   Param,
   Query,
   ParseUUIDPipe,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { UsersService } from './users.service';
 import { CreateUserDto, UpdateUserDto } from './dto';
 import { CurrentUser, RequirePermissions, Roles } from '../rbac';
 import { PERMISSIONS, ROLES } from '../common/constants';
 import type { CurrentUserPayload } from '../auth/interfaces';
 import { AuthService } from '../auth';
+import type { AuditContext } from '../modules/audit/audit.service';
 
 @Controller('users')
 export class UsersController {
@@ -62,8 +65,17 @@ export class UsersController {
   @Post()
   @RequirePermissions(PERMISSIONS.SYSTEM_USERS_MANAGE)
   @Roles(ROLES.HR_ADMIN, ROLES.SUPER_ADMIN)
-  create(@Body() dto: CreateUserDto) {
-    return this.usersService.create(dto);
+  create(
+    @Body() dto: CreateUserDto,
+    @CurrentUser() user: CurrentUserPayload,
+    @Req() req: Request,
+  ) {
+    return this.usersService.create(
+      dto,
+      user,
+      this.getAuditContext(req),
+      this.getRequestPath(req),
+    );
   }
 
   /**
@@ -73,8 +85,19 @@ export class UsersController {
   @Patch(':id')
   @RequirePermissions(PERMISSIONS.SYSTEM_USERS_MANAGE)
   @Roles(ROLES.HR_ADMIN, ROLES.SUPER_ADMIN)
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateUserDto) {
-    return this.usersService.update(id, dto);
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateUserDto,
+    @CurrentUser() user: CurrentUserPayload,
+    @Req() req: Request,
+  ) {
+    return this.usersService.update(
+      id,
+      dto,
+      user,
+      this.getAuditContext(req),
+      this.getRequestPath(req),
+    );
   }
 
   /**
@@ -86,5 +109,18 @@ export class UsersController {
   @Roles(ROLES.SUPER_ADMIN)
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.usersService.remove(id);
+  }
+
+  private getAuditContext(req: Request): AuditContext {
+    const requestWithId = req as Request & { requestId?: string };
+    return {
+      ip: req.ip ?? null,
+      userAgent: req.get('user-agent') ?? null,
+      requestId: requestWithId.requestId ?? req.get('x-request-id') ?? null,
+    };
+  }
+
+  private getRequestPath(req: Request): string {
+    return req.originalUrl ?? req.url;
   }
 }

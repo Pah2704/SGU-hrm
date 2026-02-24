@@ -1,8 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from './../src/app.module';
 import { PrismaService } from './../src/prisma/prisma.service';
+import { configureApp } from './../src/app.setup';
 
 interface LoginResponseBody {
   accessToken: string;
@@ -16,8 +17,35 @@ interface UnitTreeNode {
   level: number;
   path: string;
   status: string;
+  isDeleted: boolean;
+  deletedAt: string | null;
   children: UnitTreeNode[];
 }
+
+const findUnitByCode = (
+  nodes: UnitTreeNode[],
+  code: string,
+): UnitTreeNode | undefined => {
+  for (const node of nodes) {
+    if (node.code === code) {
+      return node;
+    }
+
+    const foundInChildren = findUnitByCode(node.children ?? [], code);
+    if (foundInChildren) {
+      return foundInChildren;
+    }
+  }
+
+  return undefined;
+};
+
+const unwrapData = <T>(body: unknown): T => {
+  if (typeof body === 'object' && body !== null && 'data' in body) {
+    return (body as { data: T }).data;
+  }
+  return body as T;
+};
 
 describe('Organizations (e2e)', () => {
   let app: INestApplication;
@@ -32,16 +60,14 @@ describe('Organizations (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, transform: true }),
-    );
+    configureApp(app);
     await app.init();
 
     // Login as admin to get token
     const loginRes = await request(httpServer())
       .post('/auth/login')
       .send({ email: 'admin@sgu.edu.vn', password: 'Admin@123' });
-    const loginBody = loginRes.body as LoginResponseBody;
+    const loginBody = unwrapData<LoginResponseBody>(loginRes.body);
     adminToken = loginBody.accessToken;
 
     // Clean up test data
@@ -62,7 +88,7 @@ describe('Organizations (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
 
-      const tree = res.body as UnitTreeNode[];
+      const tree = unwrapData<UnitTreeNode[]>(res.body);
       expect(Array.isArray(tree)).toBe(true);
       // Should have at least the seeded root unit ("SGU")
       expect(tree.length).toBeGreaterThanOrEqual(1);
@@ -85,7 +111,7 @@ describe('Organizations (e2e)', () => {
       const treeRes = await request(httpServer())
         .get('/units')
         .set('Authorization', `Bearer ${adminToken}`);
-      const tree = treeRes.body as UnitTreeNode[];
+      const tree = unwrapData<UnitTreeNode[]>(treeRes.body);
       const rootId = tree[0]?.id;
       expect(rootId).toBeDefined();
       if (!rootId) {
@@ -103,7 +129,7 @@ describe('Organizations (e2e)', () => {
         })
         .expect(201);
 
-      const body = res.body as UnitTreeNode;
+      const body = unwrapData<UnitTreeNode>(res.body);
       expect(body.code).toBe('TEST_KHOA');
       expect(body.parentId).toBe(rootId);
       expect(body.level).toBe(1);
@@ -114,7 +140,7 @@ describe('Organizations (e2e)', () => {
       const treeRes = await request(httpServer())
         .get('/units')
         .set('Authorization', `Bearer ${adminToken}`);
-      const tree = treeRes.body as UnitTreeNode[];
+      const tree = unwrapData<UnitTreeNode[]>(treeRes.body);
       const rootId = tree[0]?.id;
       expect(rootId).toBeDefined();
       if (!rootId) {
@@ -140,7 +166,7 @@ describe('Organizations (e2e)', () => {
       const treeRes = await request(httpServer())
         .get('/units')
         .set('Authorization', `Bearer ${adminToken}`);
-      const tree = treeRes.body as UnitTreeNode[];
+      const tree = unwrapData<UnitTreeNode[]>(treeRes.body);
       const root = tree[0];
       const testUnit = root.children.find((c) => c.code === 'TEST_KHOA');
       expect(testUnit).toBeDefined();
@@ -154,7 +180,7 @@ describe('Organizations (e2e)', () => {
         .send({ name: 'Khoa Test Updated' })
         .expect(200);
 
-      const body = res.body as UnitTreeNode;
+      const body = unwrapData<UnitTreeNode>(res.body);
       expect(body.name).toBe('Khoa Test Updated');
     });
   });
@@ -164,7 +190,7 @@ describe('Organizations (e2e)', () => {
       const treeRes = await request(httpServer())
         .get('/units')
         .set('Authorization', `Bearer ${adminToken}`);
-      const tree = treeRes.body as UnitTreeNode[];
+      const tree = unwrapData<UnitTreeNode[]>(treeRes.body);
       const root = tree[0];
       const testUnit = root.children.find((c) => c.code === 'TEST_KHOA');
       expect(testUnit).toBeDefined();
@@ -177,17 +203,17 @@ describe('Organizations (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
 
-      const body = res.body as unknown[];
+      const body = unwrapData<unknown[]>(res.body);
       expect(Array.isArray(body)).toBe(true);
     });
   });
 
   describe('DELETE /units/:id', () => {
-    it('should soft-delete a unit (set INACTIVE)', async () => {
+    it('should soft-delete a unit (set isDeleted/deletedAt)', async () => {
       const treeRes = await request(httpServer())
         .get('/units')
         .set('Authorization', `Bearer ${adminToken}`);
-      const tree = treeRes.body as UnitTreeNode[];
+      const tree = unwrapData<UnitTreeNode[]>(treeRes.body);
       const root = tree[0];
       const testUnit = root.children.find((c) => c.code === 'TEST_KHOA');
       expect(testUnit).toBeDefined();
@@ -200,8 +226,64 @@ describe('Organizations (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
 
-      const body = res.body as UnitTreeNode;
-      expect(body.status).toBe('INACTIVE');
+      const body = unwrapData<UnitTreeNode>(res.body);
+      expect(body.isDeleted).toBe(true);
+      expect(body.deletedAt).toBeTruthy();
+    });
+
+    it('should hide soft-deleted units by default', async () => {
+      const res = await request(httpServer())
+        .get('/units')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      const tree = unwrapData<UnitTreeNode[]>(res.body);
+      const unit = findUnitByCode(tree, 'TEST_KHOA');
+      expect(unit).toBeUndefined();
+    });
+
+    it('should include soft-deleted units for admin when requested', async () => {
+      const res = await request(httpServer())
+        .get('/units?includeSoftDeleted=true')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      const tree = unwrapData<UnitTreeNode[]>(res.body);
+      const unit = findUnitByCode(tree, 'TEST_KHOA');
+      expect(unit).toBeDefined();
+      expect(unit?.isDeleted).toBe(true);
+    });
+  });
+
+  describe('DELETE /units/:id/hard', () => {
+    it('should permanently delete a previously soft-deleted unit', async () => {
+      const treeRes = await request(httpServer())
+        .get('/units?includeSoftDeleted=true')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      const tree = unwrapData<UnitTreeNode[]>(treeRes.body);
+      const testUnit = findUnitByCode(tree, 'TEST_KHOA');
+      expect(testUnit).toBeDefined();
+      if (!testUnit) {
+        throw new Error('Soft-deleted test unit not found');
+      }
+
+      const hardDeleteRes = await request(httpServer())
+        .delete(`/units/${testUnit.id}/hard`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      const deletedBody = unwrapData<UnitTreeNode>(hardDeleteRes.body);
+      expect(deletedBody.code).toBe('TEST_KHOA');
+
+      const verifyRes = await request(httpServer())
+        .get('/units?includeSoftDeleted=true')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      const verifyTree = unwrapData<UnitTreeNode[]>(verifyRes.body);
+      expect(findUnitByCode(verifyTree, 'TEST_KHOA')).toBeUndefined();
     });
   });
 });
